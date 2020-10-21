@@ -1,0 +1,73 @@
+scchart DDD_Pacemaker {
+	input signal VSense, ASense, VRP_TO, URI_TO, LRI_TO, AEI_TO, PVARP_TO,  AVI_TO;
+	output signal VPace, APace, VRP_start, LRI_start, URI_start, AEI_start, PVARP_start, AVI_start, LRI_stop, AEI_stop, AVI_stop, URI_stop;
+	
+	initial state top{
+	  	signal PVARP_ex, VRP_ex, URI_ex;
+
+		// VRP - the time after a ventricular event where any other ventricular events 
+		// are ignored as Ventricular Refractory (VR) signals.
+		region VRP:
+		initial state idle --> commit1 with VSense
+		--> commit1 with VPace;
+		connector state commit1 --> waitVRP immediate with / VRP_start;
+		state waitVRP --> idle with VRP_TO / VRP_ex;
+		
+		// URI - The fastest rate at which the pacemaker will ever pace the heart at. 
+		// This is measured as the time between ventricular events.
+		// URI resets when a ventricular event is sensed after the VRP.
+		region URI:
+		initial state init --> commit1 with VSense
+		 --> commit1 with VPace;
+		connector state commit1 --> waitVRP immediate with / URI_start;
+		state waitVRP --> waitURI with VRP_ex;
+		state waitURI --> init with URI_TO / URI_ex
+		--> commit2 with VSense / URI_stop;
+		connector state commit2 --> URI_reset immediate with / URI_ex;
+		state URI_reset --> waitVRP with / URI_start;
+		
+		// LRI - The slowest rate at which the heart is allowed to operate. 
+		// This is measured as the time between ventricular events.
+		region LRI:
+		initial state init --> commit1 with VSense
+		--> commit1 with VPace;
+		connector state commit1 --> waitVRP immediate with / LRI_start;
+		state waitVRP --> waitLRI with VRP_ex;
+		state waitLRI --> reInit with VSense / LRI_stop
+		--> reInit with VPace / LRI_stop
+		--> reInit with LRI_TO / VPace;
+		state reInit --> waitVRP with /LRI_start;
+		
+		// AEI - The maximum time between a ventricular event and its subsequent atrial event.
+		region AEI:
+		initial state idle --> commit1 with VSense
+		--> commit1 with VPace;
+		connector state commit1 --> waitPVARP immediate with / AEI_start;
+		state waitPVARP --> waitAEI with PVARP_ex;
+		state waitAEI --> commit2 with ASense
+		--> commit2 with APace
+		--> idle with AEI_TO / APace;
+		connector state commit2 --> idle immediate with / AEI_stop; 
+		
+		// PVARP - The  time  after  a  ventricular  event  where anyatrial  events  
+		// are  ignored  as  Atrial Refractory (AR) signals.
+		region PVARP:
+		initial state idle --> commit1 with VSense
+		 				   --> commit1 with VPace;
+		connector state commit1 --> waitPVARP immediate with / PVARP_start;
+		state waitPVARP --> idle with PVARP_TO / PVARP_ex;
+		
+		// AVI - The maximum time between an atrial event and its subsequent ventricular event.
+		region AVI:
+		initial state idle --> commit1 with ASense
+		--> commit1 with APace;
+		connector state commit1 --> waitAVI immediate with /AVI_start;
+		state waitAVI --> commit2 with VSense
+		--> commit2 with VPace
+		--> waitURI with AVI_TO;
+		connector state commit2 --> waitPVARP immediate with / AVI_stop; 
+		state waitPVARP --> idle with PVARP_ex;
+		state waitURI --> idle with URI_ex / VPace;
+		
+	};
+}
